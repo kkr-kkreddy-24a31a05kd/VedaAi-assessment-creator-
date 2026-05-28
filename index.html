@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VedaAI - AI Assessment Creator</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts (Plus Jakarta Sans for Premium Modern Aesthetic) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .console-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    /* --- CRITICAL: PREMIUM PRINT/PDF DOWNLOAD OPTIMIZATIONS --- */
+    @media print {
+      /* Hide entire web app UI, sidebars, dashboard elements, and buttons */
+      body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      header, aside, main > *:not(#exam-paper-section), .print\:hidden, button, .action-bar, .bg-slate-950, #exam-paper-container-controls {
+        display: none !important;
+      }
+      /* Expand the exam paper to full printable page dimensions */
+      #exam-paper-section {
+        width: 100% !important;
+        max-width: 100% !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #exam-paper-container {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      /* Prevent ugly break points in middle of questions */
+      .question-item {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .section-block {
+        page-break-inside: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[#F8F9FC] text-slate-800 antialiased min-h-screen flex flex-col md:flex-row">
+
+  <!-- ROOT MOUNT CONTAINER -->
+  <div id="app" class="w-full flex flex-col md:flex-row min-h-screen"></div>
+
+  <!-- APPLICATION LOGIC & REACTION STATES -->
+  <script>
+    // --- STATE MANAGEMENT ---
+    const state = {
+      isLoggedIn: false,
+      authMode: 'login', // 'login' or 'signup'
+      authEmail: 'teacher@dpsbokaro.edu.in',
+      authPassword: '••••••••••••',
+      
+      teacherName: 'Dr. Alok Kumar',
+      schoolName: 'Delhi Public School',
+      schoolCity: 'Bokaro Steel City',
+      selectedProfileImage: '👨‍🏫',
+
+      activeTab: 'assignments', // 'home', 'groups', 'assignments', 'toolkit', 'library', 'settings'
+      sidebarOpen: false,
+      activeStep: 1, // 1: Design, 2: Queue processing, 3: Exam Output
+      notification: null,
+
+      dashboardStats: {
+        totalAssessments: 12,
+        activeClasses: 4,
+        totalStudents: 154,
+        aiTokensUsed: '45,210'
+      },
+
+      groups: [
+        { id: 'g-1', className: 'Class 10-A', subject: 'Biology', studentsCount: 38, averageScore: '78%' },
+        { id: 'g-2', className: 'Class 11-B', subject: 'Applied Physics', studentsCount: 42, averageScore: '84%' },
+        { id: 'g-3', className: 'Class 12-C', subject: 'Advanced Calculus', studentsCount: 35, averageScore: '91%' },
+        { id: 'g-4', className: 'Class 10-D', subject: 'General Science', studentsCount: 39, averageScore: '72%' }
+      ],
+      newGroupName: '',
+      newGroupSubject: 'General Science',
+      newGroupStudents: 30,
+
+      systemInstructions: 'Strictly adhere to the grade vocabulary guidelines. Avoid ambiguous options in MCQ sections.',
+      gradingStandard: 'CBSE High School Standard',
+
+      toolkitActiveTool: 'rubric',
+      toolkitTopic: 'Plant Transpiration and Osmosis',
+      toolkitGrade: 'Grade 10',
+      toolkitCustomTarget: 'Provide 4 distinct levels of performance: Excellent, Proficient, Developing, and Novice.',
+      generatedRubric: null,
+      toolkitLoading: false,
+
+      libraryPapers: [
+        {
+          id: 'lib-1',
+          title: 'Science Term Assessment: Photosynthesis & Plant Cellular Respiration',
+          topic: 'Photosynthesis',
+          grade: 'Grade 10',
+          totalMarks: 49,
+          duration: '1 Hour 30 Minutes',
+          createdAt: '2026-05-20',
+          isPremium: true
+        },
+        {
+          id: 'lib-2',
+          title: 'Ethics and Bias in Artificial Intelligence Mid-Term Exam',
+          topic: 'AI Ethics',
+          grade: 'Grade 11',
+          totalMarks: 40,
+          duration: '1 Hour 45 Minutes',
+          createdAt: '2026-05-18',
+          isPremium: false
+        }
+      ],
+
+      // Queue state
+      queueLogs: [],
+      queueProgress: 0,
+      processingState: 'idle', // idle, queuing, working, completed
+
+      // Active Exam creation values
+      topic: 'Photosynthesis and Plant Cellular Respiration',
+      gradeLevel: 'Grade 10',
+      dueDate: '2026-06-15',
+      sectionsConfig: [
+        { id: 'sec-a', name: 'Section A: Multiple Choice', type: 'mcq', count: 5, marksPerQuest: 2, difficulty: 'Easy' },
+        { id: 'sec-b', name: 'Section B: Short Answer Questions', type: 'short', count: 3, marksPerQuest: 5, difficulty: 'Medium' },
+        { id: 'sec-c', name: 'Section C: Long Answer / Essay', type: 'long', count: 2, marksPerQuest: 12, difficulty: 'Hard' }
+      ],
+      sourceText: 'Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy that, through cellular respiration, can later be released to fuel the organisms activities. This chemical energy is stored in carbohydrate molecules, such as sugars and starches, which are synthesized from carbon dioxide and water. Carbon dioxide is absorbed via stomata, and water enters through root hairs. The light-dependent reactions occur in the thylakoid membranes, while the light-independent reactions (Calvin Cycle) happen in the stroma of chloroplasts.',
+      additionalInstructions: 'Focus on the light-dependent reactions vs. Calvin Cycle. Include one real-world scenario question.',
+
+      generatedPaper: null,
+
+      // Live paper inputs
+      studentName: '',
+      studentRollNo: '',
+      studentSection: '',
+
+      editingQuestionId: null,
+      editedQuestionText: '',
+      editedQuestionMarks: 0
+    };
+
+    const apiKey = "";
+    const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+
+    // --- FALLBACK PAPERS REPOSITORY ---
+    const fallbackPaper = {
+      title: "Science Term Assessment: Photosynthesis & Plant Cellular Respiration",
+      grade: "Grade 10",
+      totalMarks: 49,
+      duration: "1 Hour 30 Minutes",
+      instructions: "Attempt all questions. Follow the instructions specified in each section clearly. Write your answers in the space provided.",
+      sections: [
+        {
+          id: "sec-a",
+          title: "Section A: Multiple Choice",
+          instruction: "Choose the single correct option for each question. Each question carries 2 marks.",
+          questions: [
+            {
+              id: "q-1",
+              text: "Where do the light-dependent reactions of photosynthesis primarily take place within the chloroplast?",
+              difficulty: "Easy",
+              marks: 2,
+              type: "mcq",
+              options: ["Stroma", "Thylakoid Membrane", "Outer Membrane", "Mitochondrial Matrix"]
+            },
+            {
+              id: "q-2",
+              text: "Which of the following molecules absorbs light energy to initiate the photolysis of water?",
+              difficulty: "Easy",
+              marks: 2,
+              type: "mcq",
+              options: ["Carbon dioxide", "Chlorophyll a", "RuBisCO", "Glucose"]
+            },
+            {
+              id: "q-3",
+              text: "What gas is produced as a byproduct during the light-dependent reactions?",
+              difficulty: "Easy",
+              marks: 2,
+              type: "mcq",
+              options: ["Oxygen", "Carbon Dioxide", "Nitrogen", "Methane"]
+            },
+            {
+              id: "q-4",
+              text: "Which enzyme is responsible for carbon fixation in the Calvin Cycle?",
+              difficulty: "Medium",
+              marks: 2,
+              type: "mcq",
+              options: ["ATP Synthase", "RuBisCO", "Amylase", "DNA Polymerase"]
+            },
+            {
+              id: "q-5",
+              text: "During cellular respiration, which process yields the highest amount of ATP molecules?",
+              difficulty: "Medium",
+              marks: 2,
+              type: "mcq",
+              options: ["Glycolysis", "The Krebs Cycle", "Electron Transport Chain", "Lactic Acid Fermentation"]
+            }
+          ]
+        },
+        {
+          id: "sec-b",
+          title: "Section B: Short Answer Questions",
+          instruction: "Answer the following questions in 2-3 concise sentences. Each question carries 5 marks.",
+          questions: [
+            {
+              id: "q-6",
+              text: "Explain how stomata regulate gas exchange and transpiration rate in response to dry environmental conditions.",
+              difficulty: "Medium",
+              marks: 5,
+              type: "short"
+            },
+            {
+              id: "q-7",
+              text: "Distinguish clearly between the role of NADPH in the light-dependent reactions and its utilization in the Calvin Cycle.",
+              difficulty: "Medium",
+              marks: 5,
+              type: "short"
+            },
+            {
+              id: "q-8",
+              text: "A scientist blockades the light source of an actively growing plant. Explain what immediate chemical changes occur in the concentration of RuBP.",
+              difficulty: "Hard",
+              marks: 5,
+              type: "short"
+            }
+          ]
+        },
+        {
+          id: "sec-c",
+          title: "Section C: Long Answer / Essay",
+          instruction: "Provide detailed scientific answers. Draw diagrams where necessary. Each question carries 12 marks.",
+          questions: [
+            {
+              id: "q-9",
+              text: "Detail the entire cycle of photosynthesis. Compare and contrast how light-dependent reactions and the Calvin cycle depend directly and indirectly upon each other to build glucose.",
+              difficulty: "Hard",
+              marks: 12,
+              type: "long"
+            },
+            {
+              id: "q-10",
+              text: "Analyze the cellular respiration mechanism within a plant cell during the night. Elaborate on how carbohydrates manufactured during the day are metabolized to supply metabolic energy.",
+              difficulty: "Hard",
+              marks: 12,
+              type: "long"
+            }
+          ]
+        }
+      ]
+    };
+
+    // --- NOTIFICATION HANDLER ---
+    function triggerNotification(message, type = 'success') {
+      state.notification = { message, type };
+      render();
+      setTimeout(() => {
+        state.notification = null;
+        render();
+      }, 3000);
+    }
+
+    // --- ACTIONS & OPERATIONS ---
+    window.handleAuthSubmit = function(e) {
+      e.preventDefault();
+      state.isLoggedIn = true;
+      triggerNotification(`Welcome back, ${state.teacherName}! Successfully synchronized session.`);
+    };
+
+    window.toggleAuthMode = function() {
+      state.authMode = state.authMode === 'login' ? 'signup' : 'login';
+      render();
+    };
+
+    window.setGuestMode = function() {
+      state.isLoggedIn = true;
+      triggerNotification("Accessing VedaAI under guest credential sandbox.");
+    };
+
+    window.changeTab = function(tabName) {
+      state.activeTab = tabName;
+      state.sidebarOpen = false;
+      render();
+    };
+
+    window.changeStep = function(stepNum) {
+      state.activeStep = stepNum;
+      render();
+    };
+
+    window.toggleSidebar = function() {
+      state.sidebarOpen = !state.sidebarOpen;
+      render();
+    };
+
+    window.addSectionRow = function() {
+      const newId = `sec-${Date.now()}`;
+      state.sectionsConfig.push({
+        id: newId,
+        name: `Section ${String.fromCharCode(65 + state.sectionsConfig.length)}`,
+        type: 'mcq',
+        count: 3,
+        marksPerQuest: 4,
+        difficulty: 'Medium'
+      });
+      render();
+    };
+
+    window.removeSectionRow = function(id) {
+      if (state.sectionsConfig.length > 1) {
+        state.sectionsConfig = state.sectionsConfig.filter(sec => sec.id !== id);
+        render();
+      }
+    };
+
+    window.updateSectionField = function(id, field, value) {
+      state.sectionsConfig = state.sectionsConfig.map(sec => {
+        if (sec.id === id) {
+          return { ...sec, [field]: value };
+        }
+        return sec;
+      });
+      render();
+    };
+
+    window.loadPreset = function(presetName) {
+      if (presetName === 'AI ethics') {
+        state.topic = 'Ethics and Bias in Artificial Intelligence';
+        state.gradeLevel = 'Grade 11';
+        state.additionalInstructions = 'Explain algorithmic bias, filter bubbles, and generate 1 case scenario question on autonomous vehicles.';
+        state.sourceText = 'Artificial intelligence bias occurs when an algorithm outputs systematically prejudiced results due to erroneous assumptions in the machine learning process. Guardrails include algorithmic audits, diverse training datasets, and explainable models.';
+      } else if (presetName === 'Calculus') {
+        state.topic = 'Introduction to Derivatives and Limits';
+        state.gradeLevel = 'Grade 12';
+        state.additionalInstructions = 'Include a limits equation question and physical representation of instantaneous rate of change.';
+        state.sourceText = 'The derivative of a function of a real variable measures the sensitivity to change of the output value with respect to a change in its input value. Derivatives are a fundamental tool of calculus.';
+      } else {
+        state.topic = 'Photosynthesis and Plant Cellular Respiration';
+        state.gradeLevel = 'Grade 10';
+        state.additionalInstructions = 'Focus on light reactions, Calvin cycle, and metabolic ATP conversion.';
+        state.sourceText = 'Photosynthesis converts light energy into chemical energy stored in carbohydrates inside chloroplasts. Plants then execute respiration in their mitochondria to break glucose and generate ATP for physiological actions.';
+      }
+      triggerNotification(`Populated creator workspace with '${presetName}' preset.`);
+    };
+
+    // --- AI PAPER SYNTHESIZER WITH DISTRIBUTED QUEUE EMULATION ---
+    const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+    window.runSimulationAndGenerate = async function() {
+      state.activeStep = 2;
+      state.processingState = 'queuing';
+      state.queueProgress = 5;
+      state.queueLogs = [
+        { timestamp: new Date().toLocaleTimeString(), message: "🚀 WebSocket: Client initialized assessment request.", type: "client" },
+        { timestamp: new Date().toLocaleTimeString(), message: "📦 API Gateway: Validated user parameters successfully.", type: "info" },
+        { timestamp: new Date().toLocaleTimeString(), message: "🔄 BullMQ: Enqueued background job 'generate-assessment' in queue: 'veda-jobs'.", type: "redis" },
+        { timestamp: new Date().toLocaleTimeString(), message: "💾 Redis: Cached initial job state status 'queued' with ID: 'job_88a101b2f'.", type: "redis" }
+      ];
+      render();
+
+      await delay(1200);
+      state.queueProgress = 25;
+      state.queueLogs.push(
+        { timestamp: new Date().toLocaleTimeString(), message: "⚡ BullMQ Worker [Instance-04]: Acquired job 'job_88a101b2f' from Redis cluster.", type: "worker" },
+        { timestamp: new Date().toLocaleTimeString(), message: "📂 Worker: Fetching supplementary instructions and optional textbook passage.", type: "info" }
+      );
+      state.processingState = 'working';
+      render();
+
+      await delay(1000);
+      state.queueProgress = 50;
+      state.queueLogs.push(
+        { timestamp: new Date().toLocaleTimeString(), message: "🤖 AI Core: Preparing structured prompt template...", type: "ai" },
+        { timestamp: new Date().toLocaleTimeString(), message: "📡 Gemini API: Making live REST request for structured assessment JSON parsing...", type: "ai" }
+      );
+      render();
+
+      try {
+        const livePaper = await fetchPaperFromAI();
+        state.generatedPaper = livePaper;
+        state.queueProgress = 85;
+        state.queueLogs.push(
+          { timestamp: new Date().toLocaleTimeString(), message: "✅ Gemini API: Successfully parsed response into strict exam structure.", type: "ai" },
+          { timestamp: new Date().toLocaleTimeString(), message: "💾 Redis: Caching generated exam paper layout for quick loading (TTL: 24h).", type: "redis" },
+          { timestamp: new Date().toLocaleTimeString(), message: "⚡ Worker: Finished processing 'generate-assessment' job successfully.", type: "worker" }
+        );
+        render();
+        
+        await delay(800);
+        state.queueProgress = 100;
+        state.queueLogs.push({ timestamp: new Date().toLocaleTimeString(), message: "📢 WebSocket: Dispatched final payload 'assessment_ready' to client UI.", type: "client" });
+        state.processingState = 'completed';
+        
+        // Save to Library mock list
+        const calculatedTotalMarks = state.sectionsConfig.reduce((sum, sec) => sum + (sec.count * sec.marksPerQuest), 0);
+        state.libraryPapers.unshift({
+          id: `lib-${Date.now()}`,
+          title: livePaper.title || `Custom Exam: ${state.topic}`,
+          topic: state.topic,
+          grade: state.gradeLevel,
+          totalMarks: calculatedTotalMarks,
+          duration: livePaper.duration || "1 Hour 45 Minutes",
+          createdAt: new Date().toISOString().split('T')[0],
+          isPremium: true
+        });
+        state.dashboardStats.totalAssessments += 1;
+        
+        render();
+        await delay(600);
+        state.activeStep = 3;
+        render();
+      } catch (error) {
+        console.warn("Gemini Live prompt failed or offline. Continuing with fallback blueprint.", error);
+        state.queueLogs.push(
+          { timestamp: new Date().toLocaleTimeString(), message: "⚠️ Live LLM prompt failed or key missing. Loading fallback blueprint.", type: "warning" },
+          { timestamp: new Date().toLocaleTimeString(), message: "💾 Redis: Retrieved fallback templates successfully from memory cache.", type: "redis" },
+          { timestamp: new Date().toLocaleTimeString(), message: "⚡ Worker: Finished processing with high-quality fallback backup.", type: "worker" }
+        );
+        state.generatedPaper = fallbackPaper;
+        render();
+        
+        await delay(1200);
+        state.queueProgress = 100;
+        state.processingState = 'completed';
+        render();
+        await delay(600);
+        state.activeStep = 3;
+        render();
+      }
+    };
+
+    async function fetchPaperFromAI() {
+      const calculatedTotalMarks = state.sectionsConfig.reduce((sum, sec) => sum + (sec.count * sec.marksPerQuest), 0);
+      const formattedSections = state.sectionsConfig.map(s => 
+        `- ${s.name}: Type is "${s.type}" (${s.count} questions, ${s.marksPerQuest} marks each, ${s.difficulty} difficulty)`
+      ).join("\n");
+
+      const systemPrompt = `You are VedaAI, an elite syllabus assessment design system. You output valid JSON conforming exactly to the requested scheme. Do not include raw conversational explanations. Output only a JSON object.`;
+      const userQuery = `Create a real school exam paper based on:
+Topic: ${state.topic}
+Grade: ${state.gradeLevel}
+Total Target Marks: ${calculatedTotalMarks}
+Context / Source material: ${state.sourceText}
+Additional Instructions: ${state.additionalInstructions}
+Grading Standard: ${state.gradingStandard}
+
+Generate the exam containing these exact sections:
+${formattedSections}
+
+Your output MUST be a JSON object with this exact structure:
+{
+  "title": "Title of the Assessment",
+  "grade": "${state.gradeLevel}",
+  "totalMarks": ${calculatedTotalMarks},
+  "duration": "1 Hour 45 Minutes",
+  "instructions": "General exam paper instructions for the students.",
+  "sections": [
+    {
+      "id": "sec-a",
+      "title": "Section Title (e.g. Section A: Multiple Choice)",
+      "instruction": "Instructions for this section",
+      "questions": [
+        {
+          "id": "unique-q-id-1",
+          "text": "The full question text",
+          "difficulty": "Easy",
+          "marks": 2,
+          "type": "mcq",
+          "options": ["Option A", "Option B", "Option C", "Option D"]
+        }
+      ]
+    }
+  ]
+}`;
+
+      let retries = 3;
+      let delayMs = 1000;
+      while (retries > 0) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: userQuery }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { responseMimeType: "application/json" }
+            })
+          });
+
+          if (!response.ok) throw new Error(`HTTP status error: ${response.status}`);
+          const data = await response.json();
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!rawText) throw new Error("Empty candidate response");
+          return JSON.parse(rawText.trim());
+        } catch (e) {
+          retries--;
+          if (retries === 0) throw e;
+          await delay(delayMs);
+          delayMs *= 2;
+        }
+      }
+    }
+
+    // --- GROUPS CREATOR ACTIONS ---
+    window.handleCreateGroup = function(e) {
+      e.preventDefault();
+      const nameInput = document.getElementById('newGroupName').value;
+      const subjectInput = document.getElementById('newGroupSubject').value;
+      const studentsInput = document.getElementById('newGroupStudents').value;
+      
+      if (!nameInput.trim()) return;
+      state.groups.push({
+        id: `g-${Date.now()}`,
+        className: nameInput,
+        subject: subjectInput,
+        studentsCount: parseInt(studentsInput) || 25,
+        averageScore: 'TBD'
+      });
+      state.dashboardStats.activeClasses += 1;
+      triggerNotification(`Class cohort '${nameInput}' initialized successfully!`);
+    };
+
+    window.handleDeleteGroup = function(id, name) {
+      state.groups = state.groups.filter(g => g.id !== id);
+      state.dashboardStats.activeClasses = Math.max(0, state.dashboardStats.activeClasses - 1);
+      triggerNotification(`Removed ${name} from active classes.`);
+    };
+
+    // --- INLINE PAPER EDITING ACTIONS ---
+    window.startEditingQuestion = function(id, text, marks) {
+      state.editingQuestionId = id;
+      state.editedQuestionText = text;
+      state.editedQuestionMarks = marks;
+      render();
+    };
+
+    window.saveEditedQuestion = function(sectionId, questId) {
+      const textVal = document.getElementById(`edit-text-${questId}`).value;
+      const marksVal = document.getElementById(`edit-marks-${questId}`).value;
+
+      state.generatedPaper.sections = state.generatedPaper.sections.map(sec => {
+        if (sec.id === sectionId) {
+          return {
+            ...sec,
+            questions: sec.questions.map(q => {
+              if (q.id === questId) {
+                return { ...q, text: textVal, marks: parseInt(marksVal) || q.marks };
+              }
+              return q;
+            })
+          };
+        }
+        return sec;
+      });
+
+      // Recalculate total exam paper marks dynamically
+      state.generatedPaper.totalMarks = state.generatedPaper.sections.reduce((acc, s) => {
+        return acc + s.questions.reduce((sum, q) => sum + q.marks, 0);
+      }, 0);
+
+      state.editingQuestionId = null;
+      triggerNotification("Question updated and marks total recalibrated!");
+    };
+
+    window.deleteQuestion = function(sectionId, questId) {
+      state.generatedPaper.sections = state.generatedPaper.sections.map(sec => {
+        if (sec.id === sectionId) {
+          return {
+            ...sec,
+            questions: sec.questions.filter(q => q.id !== questId)
+          };
+        }
+        return sec;
+      });
+
+      state.generatedPaper.totalMarks = state.generatedPaper.sections.reduce((acc, s) => {
+        return acc + s.questions.reduce((sum, q) => sum + q.marks, 0);
+      }, 0);
+
+      triggerNotification("Question removed from assessment blueprint.");
+    };
+
+    // --- TOOLKIT RUBRICS BUILDER ACTIONS ---
+    window.generateToolkitRubric = async function() {
+      state.toolkitLoading = true;
+      triggerNotification("Deploying Rubric generation agent...");
+      render();
+
+      const rubricPrompt = `You are VedaAI Rubric Assistant. Create a rich evaluation rubric for:
+Topic: ${state.toolkitTopic}
+Target Grade: ${state.toolkitGrade}
+Parameters: ${state.toolkitCustomTarget}
+
+Output a clean JSON format matching:
+{
+  "topic": "The Rubric Title",
+  "criteriaList": [
+    {
+      "criteria": "Scientific terminology",
+      "levels": {
+        "Excellent": "Detailed description of excellent achievement",
+        "Proficient": "Description of competent achievement",
+        "Developing": "Description of partial achievement",
+        "Novice": "Minimal scientific expression used"
+      }
+    }
+  ]
+}`;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: rubricPrompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+        if (!response.ok) throw new Error("API call failed");
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        state.generatedRubric = JSON.parse(rawText.trim());
+        triggerNotification("Rubric criteria plotted successfully!");
+      } catch (e) {
+        state.generatedRubric = {
+          topic: `Evaluative Rubric for ${state.toolkitTopic} (${state.toolkitGrade})`,
+          criteriaList: [
+            {
+              criteria: "Conceptual Accuracy",
+              levels: {
+                "Excellent": "Demonstrates absolute command over transpiration dynamics, stomata mechanics, and water potentials.",
+                "Proficient": "Accurately represents the essential mechanisms of osmosis with negligible minor terminology issues.",
+                "Developing": "Struggles to distinguish clearly between osmotic potential and active mineral transport mechanisms.",
+                "Novice": "Confuses essential processes of transpiration with standard capillary actions only."
+              }
+            },
+            {
+              criteria: "Analytical Explanations",
+              levels: {
+                "Excellent": "Offers precise, comprehensive answers outlining specific chemical factors and environment impacts.",
+                "Proficient": "Answers capture the primary questions but lack rich physical parameters of cellular mechanics.",
+                "Developing": "Explanations are highly repetitive, failing to elaborate on guard cell movement.",
+                "Novice": "Fails to provide logical explanations for the requested scientific scenarios."
+              }
+            }
+          ]
+        };
+        triggerNotification("Loaded premium preset fallback rubric.", "info");
+      } finally {
+        state.toolkitLoading = false;
+        render();
+      }
+    };
+
+    window.loadPaperFromLibrary = function(paperId) {
+      if (paperId === 'lib-1') {
+        state.generatedPaper = fallbackPaper;
+      } else {
+        state.generatedPaper = {
+          title: "Ethics and Bias in Artificial Intelligence Mid-Term Exam",
+          grade: "Grade 11",
+          totalMarks: 40,
+          duration: "1 Hour 45 Minutes",
+          instructions: "Answer all sections. Adhere strictly to word limits.",
+          sections: [
+            {
+              id: "sec-a",
+              title: "Section A: Ethics Frameworks",
+              instruction: "Identify framework types and biases",
+              questions: [
+                {
+                  id: "q-eth-1",
+                  text: "Which type of data collection error occurs when a model is trained primarily on high-income demographics?",
+                  difficulty: "Medium",
+                  marks: 5,
+                  type: "short"
+                }
+              ]
+            }
+          ]
+        };
+      }
+      state.activeTab = 'assignments';
+      state.activeStep = 3;
+      triggerNotification("Exam draft restored to Active Preview workspace!");
+    };
+
+    window.applySettings = function(e) {
+      e.preventDefault();
+      state.teacherName = document.getElementById('settingTeacherName').value;
+      state.selectedProfileImage = document.getElementById('settingProfileImage').value;
+      state.schoolName = document.getElementById('settingSchoolName').value;
+      state.schoolCity = document.getElementById('settingSchoolCity').value;
+      state.gradingStandard = document.getElementById('settingGradingStandard').value;
+      state.systemInstructions = document.getElementById('settingSystemInstructions').value;
+      triggerNotification("Saved system parameters successfully!");
+    };
+
+    window.triggerPrintPdf = function() {
+      // Direct call to native browser print engine tailored by CSS @media print styles
+      window.print();
+    };
+
+    // --- HTML RENDER DOM TEMPLATES ---
+    function render() {
+      const root = document.getElementById('app');
+      
+      // Notify Overlay Banner
+      let notifyHtml = '';
+      if (state.notification) {
+        notifyHtml = `
+          <div class="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold transition-all duration-300 animate-bounce ${
+            state.notification.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-green-50 border-green-200 text-green-700'
+          }">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>${state.notification.message}</span>
+          </div>
+        `;
+      }
+
+      // 1. UNSYNCED SPLASH SCREEN (LOGIN PORTAL)
+      if (!state.isLoggedIn) {
+        root.innerHTML = `
+          ${notifyHtml}
+          <div class="min-h-screen w-full flex flex-col lg:flex-row items-center justify-center bg-[#F5F6F8] p-4 sm:p-6 lg:p-0">
+            <!-- Left Hero Section -->
+            <div class="lg:w-1/2 p-8 lg:p-16 flex flex-col justify-between self-stretch bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 text-white relative overflow-hidden rounded-t-3xl lg:rounded-t-none lg:rounded-l-3xl shadow-xl">
+              <div class="absolute right-0 bottom-0 opacity-10 text-[200px] font-black select-none pointer-events-none -mb-24 -mr-12">VEDA</div>
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center font-extrabold text-white text-lg">V</div>
+                <span class="font-extrabold text-2xl tracking-tight">VedaAI</span>
+              </div>
+              <div class="my-12 lg:my-0 space-y-4">
+                <span class="bg-orange-500/20 text-orange-400 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">Unified Teacher Suite</span>
+                <h1 class="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
+                  AI Powered <br>
+                  <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-300">Assessment Design</span>
+                </h1>
+                <p class="text-slate-400 text-sm max-w-md leading-relaxed">
+                  Empower your grading system. Seamlessly draft structural syllabi blueprints, utilize advanced Gemini 2.5 engines, and orchestrate real-time background print queues instantly.
+                </p>
+              </div>
+              <div class="flex items-center space-x-3 text-xs text-slate-400">
+                <i data-lucide="database" class="w-4 h-4 text-orange-500"></i>
+                <span>Full-Stack sandbox: Redis Cache & BullMQ Queue Simulator Sync</span>
+              </div>
+            </div>
+
+            <!-- Right Login Form Section -->
+            <div class="w-full lg:w-1/2 p-6 sm:p-12 bg-white self-stretch flex flex-col justify-center rounded-b-3xl lg:rounded-b-none lg:rounded-r-3xl border-t lg:border-t-0 lg:border-l border-slate-200 shadow-xl">
+              <div class="max-w-md mx-auto w-full space-y-8">
+                <div class="space-y-2">
+                  <h2 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    ${state.authMode === 'login' ? 'Teacher Portal Access' : 'Create Teacher Workspace'}
+                  </h2>
+                  <p class="text-xs text-slate-400 font-bold tracking-wide uppercase">
+                    ${state.authMode === 'login' ? 'Please supply registered parameters' : 'Start orchestrating dynamic syllabus papers'}
+                  </p>
+                </div>
+
+                <form onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                  ${state.authMode === 'signup' ? `
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Teacher Name</label>
+                        <div class="relative">
+                          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="user" class="w-3.5 h-3.5"></i></span>
+                          <input type="text" id="teacherNameInput" required value="${state.teacherName}" oninput="state.teacherName = this.value" class="pl-9 w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 text-xs font-bold text-slate-800 outline-hidden focus:ring-2 focus:ring-orange-500/25 transition">
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Profile Emoji</label>
+                        <select id="profileEmojiInput" onchange="state.selectedProfileImage = this.value" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-xs font-bold text-slate-800">
+                          <option ${state.selectedProfileImage === '👨‍🏫' ? 'selected' : ''}>👨‍🏫</option>
+                          <option ${state.selectedProfileImage === '👩‍🏫' ? 'selected' : ''}>👩‍🏫</option>
+                          <option ${state.selectedProfileImage === '🧬' ? 'selected' : ''}>🧬</option>
+                          <option ${state.selectedProfileImage === '🪐' ? 'selected' : ''}>🪐</option>
+                        </select>
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">E-mail Address</label>
+                    <div class="relative">
+                      <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="mail" class="w-3.5 h-3.5"></i></span>
+                      <input type="email" required value="${state.authEmail}" oninput="state.authEmail = this.value" class="pl-9 w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 text-xs font-bold text-slate-800 outline-hidden focus:ring-2 focus:ring-orange-500/25 transition">
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Security Key / Password</label>
+                    <div class="relative">
+                      <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="lock" class="w-3.5 h-3.5"></i></span>
+                      <input type="password" required value="${state.authPassword}" oninput="state.authPassword = this.value" class="pl-9 w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 text-xs font-bold text-slate-800 outline-hidden focus:ring-2 focus:ring-orange-500/25 transition">
+                    </div>
+                  </div>
+
+                  ${state.authMode === 'signup' ? `
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">School Affiliation</label>
+                        <input type="text" id="schoolNameInput" required value="${state.schoolName}" oninput="state.schoolName = this.value" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-orange-500/25 transition">
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">City Locality</label>
+                        <input type="text" id="schoolCityInput" required value="${state.schoolCity}" oninput="state.schoolCity = this.value" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-orange-500/25 transition">
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <div class="pt-2">
+                    <button type="submit" class="w-full bg-gradient-to-r from-orange-600 to-amber-500 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-md hover:shadow-lg transition duration-200 flex items-center justify-center space-x-2 text-xs uppercase tracking-wider">
+                      <span>${state.authMode === 'login' ? 'Confirm Authorization' : 'Register & Log in'}</span>
+                      <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </form>
+
+                <div class="text-center pt-2">
+                  <button onclick="toggleAuthMode()" class="text-xs text-orange-600 hover:text-orange-700 font-bold transition decoration-dashed hover:underline">
+                    ${state.authMode === 'login' ? "Don't have a VedaAI workspace? Create one" : "Already registered? Switch to Secure Login"}
+                  </button>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-2xl text-center space-y-1 border border-slate-200">
+                  <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest block">Quick Evaluation Mode</span>
+                  <button onclick="setGuestMode()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold transition">Skip credentials and enter as guest &rarr;</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      // 2. MAIN LOGGED-IN SCREEN VIEWPORTS
+      let tabContent = '';
+      
+      // -- TAB CONTENT: HOME --
+      if (state.activeTab === 'home') {
+        tabContent = `
+          <div class="space-y-6">
+            <!-- Stats grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Total Assessments</span>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-2xl font-black text-slate-950">${state.dashboardStats.totalAssessments}</span>
+                  <span class="text-xs text-emerald-600 font-bold flex items-center">+2 this week</span>
+                </div>
+              </div>
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Active Classes</span>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-2xl font-black text-slate-950">${state.dashboardStats.activeClasses}</span>
+                  <span class="text-xs text-indigo-600 font-bold">Standard Syllabus</span>
+                </div>
+              </div>
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Monitored Students</span>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-2xl font-black text-slate-950">${state.dashboardStats.totalStudents}</span>
+                  <span class="text-xs text-amber-600 font-bold">In 4 Cohorts</span>
+                </div>
+              </div>
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Tokens Consumed</span>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-2xl font-black text-slate-950">${state.dashboardStats.aiTokensUsed}</span>
+                  <span class="text-xs text-slate-400">Monthly quota</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Fast track hero -->
+              <div class="lg:col-span-2 bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+                <div class="absolute right-0 bottom-0 opacity-10 text-[180px] font-bold select-none pointer-events-none -mb-20 -mr-6 font-mono">AI</div>
+                <div>
+                  <span class="bg-orange-500/20 text-orange-400 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md">Fast-track generator</span>
+                  <h2 class="text-2xl font-black mt-2 leading-tight">Ready to orchestrate a new examination layout?</h2>
+                  <p class="text-xs text-slate-300 mt-1 max-w-md">Deploy strict structured prompts directly aligned with standards. Edit options directly in the PDF sandbox viewer.</p>
+                </div>
+                <div class="pt-4">
+                  <button onclick="changeTab('assignments'); changeStep(1);" class="bg-white text-indigo-950 hover:bg-slate-100 font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Launch Creator Form
+                  </button>
+                </div>
+              </div>
+
+              <!-- Activity logs -->
+              <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h3 class="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Active System Logs</h3>
+                <div class="space-y-3.5">
+                  <div class="flex items-start gap-3 text-xs">
+                    <span class="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-bold">✓</span>
+                    <div>
+                      <p class="font-bold text-slate-800">Exam Blueprint finalized</p>
+                      <span class="text-[10px] text-slate-400">Class 10-A • 10 questions</span>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-3 text-xs">
+                    <span class="p-1.5 bg-blue-50 text-blue-600 rounded-lg font-bold">i</span>
+                    <div>
+                      <p class="font-bold text-slate-800">Group 'Class 12-C' updated metrics</p>
+                      <span class="text-[10px] text-slate-400">Class size: 35 Students</span>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-3 text-xs">
+                    <span class="p-1.5 bg-orange-50 text-orange-600 rounded-lg font-bold">🔥</span>
+                    <div>
+                      <p class="font-bold text-slate-800">Redis queue cache cleared</p>
+                      <span class="text-[10px] text-slate-400">System maintenance optimized</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Presets overview -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+              <h3 class="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Available Academic Exam Blueprints</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div onclick="changeTab('assignments'); loadPreset('photosynthesis');" class="p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-orange-500 transition space-y-2 cursor-pointer">
+                  <span class="text-xl">🌿</span>
+                  <h4 class="font-bold text-slate-800 text-sm">Photosynthesis & Plant Respiration</h4>
+                  <p class="text-[10px] text-slate-400">Grade 10 • Standard High School Biology</p>
+                </div>
+                <div onclick="changeTab('assignments'); loadPreset('AI ethics');" class="p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-orange-500 transition space-y-2 cursor-pointer">
+                  <span class="text-xl">🤖</span>
+                  <h4 class="font-bold text-slate-800 text-sm">Ethics and Bias in AI Systems</h4>
+                  <p class="text-[10px] text-slate-400">Grade 11 • Tech & Philosophy Ethics Paper</p>
+                </div>
+                <div onclick="changeTab('assignments'); loadPreset('Calculus');" class="p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-orange-500 transition space-y-2 cursor-pointer">
+                  <span class="text-xl">📐</span>
+                  <h4 class="font-bold text-slate-800 text-sm">Introduction to Calculus & Limits</h4>
+                  <p class="text-[10px] text-slate-400">Grade 12 • Core Mathematics Syllabus</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // -- TAB CONTENT: GROUPS --
+      else if (state.activeTab === 'groups') {
+        let groupCardsHtml = state.groups.map(g => `
+          <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between gap-4">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-slate-100 px-2.5 py-1 rounded-md text-slate-700 font-bold">${g.subject}</span>
+                <button onclick="handleDeleteGroup('${g.id}', '${g.className}')" class="text-slate-400 hover:text-red-500 transition p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </div>
+              <h3 class="text-base font-extrabold text-slate-950">${g.className}</h3>
+            </div>
+            <div class="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <span>Students size: <strong class="text-slate-900">${g.studentsCount}</strong></span>
+              <span>Avg performance: <strong class="text-slate-900">${g.averageScore}</strong></span>
+            </div>
+            <button onclick="state.gradeLevel = '${g.className}'; changeTab('assignments'); changeStep(1);" class="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 border border-slate-200">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Generate specialized paper
+            </button>
+          </div>
+        `).join('');
+
+        tabContent = `
+          <div class="space-y-6">
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div class="space-y-1">
+                <h2 class="text-lg font-bold text-slate-900">Manage Student Cohorts</h2>
+                <p class="text-xs text-slate-400">Create classes, monitor performance trends, and build specialized custom assessments.</p>
+              </div>
+              <span class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-bold">Active Groups: ${state.groups.length}</span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">${groupCardsHtml}</div>
+              
+              <!-- Form to add standard classes -->
+              <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 h-fit">
+                <h3 class="text-sm font-black text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">Create Class Cohort</h3>
+                <form onsubmit="handleCreateGroup(event)" class="space-y-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Class Cohort Name</label>
+                    <input type="text" id="newGroupName" required placeholder="e.g. Class 10-A, Class 12-F" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Academic Subject</label>
+                    <select id="newGroupSubject" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800">
+                      <option>Biology</option>
+                      <option>Applied Physics</option>
+                      <option>Advanced Calculus</option>
+                      <option>General Science</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Allocated Students Size</label>
+                    <input type="number" id="newGroupStudents" min="1" max="120" value="30" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800">
+                  </div>
+                  <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition">Register Group</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // -- TAB CONTENT: TOOLKIT --
+      else if (state.activeTab === 'toolkit') {
+        let rubricResultHtml = '';
+        if (state.generatedRubric) {
+          const criteriaRows = state.generatedRubric.criteriaList.map((crit, idx) => `
+            <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <div class="bg-slate-50 p-3 border-b border-slate-200">
+                <h4 class="text-xs font-extrabold text-slate-900">Criteria ${idx+1}: ${crit.criteria}</h4>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 text-xs">
+                ${Object.entries(crit.levels).map(([lvlName, lvlDesc]) => `
+                  <div class="p-3 space-y-1">
+                    <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                      lvlName === 'Excellent' ? 'bg-emerald-50 text-emerald-700' :
+                      lvlName === 'Proficient' ? 'bg-indigo-50 text-indigo-700' :
+                      lvlName === 'Developing' ? 'bg-amber-50 text-amber-700' :
+                      'bg-rose-50 text-rose-700'
+                    }">${lvlName}</span>
+                    <p class="text-[11px] text-slate-500 leading-relaxed font-semibold pt-1">${lvlDesc}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('');
+
+          rubricResultHtml = `
+            <div class="space-y-6">
+              <div class="border-b-2 border-slate-900 pb-3 flex justify-between items-center">
+                <div>
+                  <h2 class="text-base font-black text-slate-950 uppercase">${state.generatedRubric.topic}</h2>
+                  <p class="text-[10px] text-slate-400 font-bold uppercase mt-0.5">VedaAI Synthesized Rubric Layout</p>
+                </div>
+                <button onclick="window.print()" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-slate-800 transition">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i> Print
+                </button>
+              </div>
+              <div class="space-y-4">${criteriaRows}</div>
+            </div>
+          `;
+        } else {
+          rubricResultHtml = `
+            <div class="h-full flex flex-col justify-center items-center text-center p-8 space-y-3 min-h-[300px]">
+              <span class="text-4xl">📄</span>
+              <h3 class="text-sm font-bold text-slate-800">No Generated Rubric Active</h3>
+              <p class="text-xs text-slate-400 max-w-sm">Configure topics on the left panel to output a valid multi-level evaluation rubric instantly.</p>
+            </div>
+          `;
+        }
+
+        tabContent = `
+          <div class="space-y-6">
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex justify-between items-center gap-4">
+              <button class="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold transition">📄 Interactive Rubric Creator</button>
+              <span class="text-[10px] text-slate-400 font-extrabold uppercase">Beta Agents</span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Parameters col -->
+              <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 h-fit">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="sliders" class="w-4 h-4 text-orange-500"></i>
+                  <h3 class="text-sm font-black text-slate-900 uppercase">Configuration</h3>
+                </div>
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Subject Topic</label>
+                    <input type="text" id="toolkitTopic" value="${state.toolkitTopic}" oninput="state.toolkitTopic = this.value" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold outline-hidden">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Class Grade</label>
+                    <select id="toolkitGrade" onchange="state.toolkitGrade = this.value" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800">
+                      <option ${state.toolkitGrade === 'Grade 8' ? 'selected' : ''}>Grade 8</option>
+                      <option ${state.toolkitGrade === 'Grade 9' ? 'selected' : ''}>Grade 9</option>
+                      <option ${state.toolkitGrade === 'Grade 10' ? 'selected' : ''}>Grade 10</option>
+                      <option ${state.toolkitGrade === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Evaluation Standards</label>
+                    <textarea id="toolkitCustomTarget" oninput="state.toolkitCustomTarget = this.value" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 outline-hidden">${state.toolkitCustomTarget}</textarea>
+                  </div>
+                  <button onclick="generateToolkitRubric()" ${state.toolkitLoading ? 'disabled' : ''} class="w-full bg-slate-950 text-white hover:bg-slate-800 py-3 rounded-xl text-xs font-bold transition flex justify-center items-center gap-1">
+                    ${state.toolkitLoading ? '<i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i> Synthesizing...' : '<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Synthesize Rubric'}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Content Render -->
+              <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
+                ${rubricResultHtml}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // -- TAB CONTENT: LIBRARY --
+      else if (state.activeTab === 'library') {
+        let libraryCardsHtml = state.libraryPapers.map(paper => `
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between gap-5 relative overflow-hidden group">
+            ${paper.isPremium ? `<div class="absolute right-0 top-0 bg-orange-500 text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-bl-xl">Premium Template</div>` : ''}
+            <div class="space-y-3">
+              <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">${paper.grade} • ${paper.duration}</span>
+              <h3 class="text-sm font-black text-slate-900 tracking-tight leading-snug">${paper.title}</h3>
+            </div>
+            <div class="flex justify-between items-center text-xs text-slate-500 border-t border-slate-100 pt-3">
+              <span>Total marks: <strong class="text-slate-900">${paper.totalMarks}</strong></span>
+              <span>Saved: ${paper.createdAt}</span>
+            </div>
+            <div class="pt-2">
+              <button onclick="loadPaperFromLibrary('${paper.id}')" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+                <i data-lucide="book-open-text" class="w-3.5 h-3.5"></i> Load into workspace editor
+              </button>
+            </div>
+          </div>
+        `).join('');
+
+        tabContent = `
+          <div class="space-y-6">
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
+              <h2 class="text-base font-bold text-slate-900">Assessment Document Repository</h2>
+              <p class="text-xs text-slate-400 mt-1">Load draft papers, inspect historical blueprints, or restore templates to the live editor section.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">${libraryCardsHtml}</div>
+          </div>
+        `;
+      }
+
+      // -- TAB CONTENT: SETTINGS --
+      else if (state.activeTab === 'settings') {
+        tabContent = `
+          <div class="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
+            <h2 class="text-base font-black text-slate-900 uppercase pb-3 border-b border-slate-100">Global Configuration Profile</h2>
+            
+            <form onsubmit="applySettings(event)" class="space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teacher Identity Name</label>
+                  <input type="text" id="settingTeacherName" value="${state.teacherName}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-hidden">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Profile Avatar Icon</label>
+                  <select id="settingProfileImage" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800">
+                    <option ${state.selectedProfileImage === '👨‍🏫' ? 'selected' : ''}>👨‍🏫</option>
+                    <option ${state.selectedProfileImage === '👩‍🏫' ? 'selected' : ''}>👩‍🏫</option>
+                    <option ${state.selectedProfileImage === '🔬' ? 'selected' : ''}>🔬</option>
+                    <option ${state.selectedProfileImage === '📚' ? 'selected' : ''}>📚</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">School Affiliation</label>
+                  <input type="text" id="settingSchoolName" value="${state.schoolName}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-hidden">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">City Locality</label>
+                  <input type="text" id="settingSchoolCity" value="${state.schoolCity}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-hidden">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Grading System Standards</label>
+                <select id="settingGradingStandard" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800">
+                  <option ${state.gradingStandard === 'CBSE High School Standard' ? 'selected' : ''}>CBSE High School Standard</option>
+                  <option ${state.gradingStandard === 'ICSE / ISC Syllabus Rules' ? 'selected' : ''}>ICSE / ISC Syllabus Rules</option>
+                  <option ${state.gradingStandard === 'International Baccalaureate (IB)' ? 'selected' : ''}>International Baccalaureate (IB)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Syllabus Prompts Instructions</label>
+                <textarea id="settingSystemInstructions" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 font-semibold outline-hidden">${state.systemInstructions}</textarea>
+              </div>
+
+              <div class="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-200">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Access Security</span>
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span class="text-slate-400 block">Workspace Email</span>
+                    <strong class="text-slate-800">${state.authEmail}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block">System Keys</span>
+                    <strong class="text-slate-800">SHA-256 Enabled</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition">Apply Workspace Parameters</button>
+            </form>
+          </div>
+        `;
+      }
+
+      // -- TAB CONTENT: ASSIGNMENTS / EXAM CREATOR (MULTI-STEP) --
+      else if (state.activeTab === 'assignments') {
+        
+        // STEP 1: PARAMETERS FORM
+        if (state.activeStep === 1) {
+          const calculatedTotalMarks = state.sectionsConfig.reduce((sum, sec) => sum + (sec.count * sec.marksPerQuest), 0);
+          
+          let sectionsListHtml = state.sectionsConfig.map(sec => `
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center relative group">
+              <div class="sm:col-span-3">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Section Name</label>
+                <input type="text" value="${sec.name}" oninput="updateSectionField('${sec.id}', 'name', this.value)" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 w-full">
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Question Type</label>
+                <select onchange="updateSectionField('${sec.id}', 'type', this.value)" class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 w-full">
+                  <option value="mcq" ${sec.type === 'mcq' ? 'selected' : ''}>MCQ</option>
+                  <option value="short" ${sec.type === 'short' ? 'selected' : ''}>Short Ans</option>
+                  <option value="long" ${sec.type === 'long' ? 'selected' : ''}>Long Essay</option>
+                </select>
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Count</label>
+                <input type="number" min="1" max="30" value="${sec.count}" oninput="updateSectionField('${sec.id}', 'count', parseInt(this.value) || 0)" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 w-full">
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Marks Each</label>
+                <input type="number" min="1" max="50" value="${sec.marksPerQuest}" oninput="updateSectionField('${sec.id}', 'marksPerQuest', parseInt(this.value) || 0)" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 w-full">
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Difficulty</label>
+                <select onchange="updateSectionField('${sec.id}', 'difficulty', this.value)" class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 w-full">
+                  <option ${sec.difficulty === 'Easy' ? 'selected' : ''}>Easy</option>
+                  <option ${sec.difficulty === 'Medium' ? 'selected' : ''}>Medium</option>
+                  <option ${sec.difficulty === 'Hard' ? 'selected' : ''}>Hard</option>
+                </select>
+              </div>
+
+              <div class="sm:col-span-1 flex justify-center pt-3 sm:pt-0">
+                <button onclick="removeSectionRow('${sec.id}')" ${state.sectionsConfig.length === 1 ? 'disabled' : ''} class="text-slate-400 hover:text-red-500 disabled:opacity-30 transition p-1.5 rounded-lg hover:bg-red-50" title="Delete Section">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          `).join('');
+
+          tabContent = `
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div class="lg:col-span-2 space-y-6">
+                <!-- Preset suggester card -->
+                <div class="bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
+                  <div class="absolute right-0 bottom-0 opacity-15 text-[140px] font-bold select-none pointer-events-none -mb-16 -mr-4 font-mono">AI</div>
+                  <div class="relative z-10">
+                    <span class="bg-indigo-500/30 text-indigo-300 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">Quick Sandbox presets</span>
+                    <h3 class="text-lg font-bold mt-2 mb-1">Select an instant topic template to test parameters:</h3>
+                    <p class="text-xs text-indigo-200 mb-4 font-medium">Click one to automatically pre-populate the complex configuration structures below.</p>
+                    <div class="flex flex-wrap gap-2">
+                      <button onclick="loadPreset('photosynthesis')" class="px-3 py-2 text-xs font-semibold rounded-xl border transition ${state.topic.includes('Photosynthesis') ? 'bg-white text-indigo-950 border-white' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800 text-slate-200'}">🌿 Biology (Photosynthesis)</button>
+                      <button onclick="loadPreset('AI ethics')" class="px-3 py-2 text-xs font-semibold rounded-xl border transition ${state.topic.includes('Ethics') ? 'bg-white text-indigo-950 border-white' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800 text-slate-200'}">🤖 Tech Ethics (AI Bias)</button>
+                      <button onclick="loadPreset('Calculus')" class="px-3 py-2 text-xs font-semibold rounded-xl border transition ${state.topic.includes('Calculus') ? 'bg-white text-indigo-950 border-white' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800 text-slate-200'}">📐 Advanced Calculus</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Parameters card -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
+                  <div class="flex items-center space-x-2 pb-3 border-b border-slate-100">
+                    <i data-lucide="sliders" class="w-4.5 h-4.5 text-orange-500"></i>
+                    <h2 class="text-lg font-bold text-slate-900">Exam Parameters</h2>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Assessment Topic</label>
+                      <input type="text" id="topicInput" value="${state.topic}" oninput="state.topic = this.value" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 outline-hidden focus:ring-2 focus:ring-orange-500/20 transition">
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Grade Level</label>
+                      <select id="gradeLevelInput" onchange="state.gradeLevel = this.value" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 outline-hidden">
+                        <option ${state.gradeLevel === 'Grade 8' ? 'selected' : ''}>Grade 8</option>
+                        <option ${state.gradeLevel === 'Grade 9' ? 'selected' : ''}>Grade 9</option>
+                        <option ${state.gradeLevel === 'Grade 10' ? 'selected' : ''}>Grade 10</option>
+                        <option ${state.gradeLevel === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+                        <option ${state.gradeLevel === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Due Date</label>
+                      <input type="date" id="dueDateInput" value="${state.dueDate}" oninput="state.dueDate = this.value" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 outline-hidden">
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Marks Target</label>
+                      <div class="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 flex justify-between items-center">
+                        <span>${calculatedTotalMarks} Marks</span>
+                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md">Validated</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Question Matrix sections -->
+                  <div>
+                    <div class="flex justify-between items-center mb-2">
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Structure Sections</label>
+                      <button onclick="addSectionRow()" class="text-xs text-orange-600 hover:text-orange-700 font-bold flex items-center space-x-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5 stroke-[3]"></i> <span>Add Section</span>
+                      </button>
+                    </div>
+                    <div class="space-y-3">${sectionsListHtml}</div>
+                  </div>
+                </div>
+
+                <!-- Reference context passage -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+                  <div class="flex items-center space-x-2 pb-3 border-b border-slate-100">
+                    <i data-lucide="file-code" class="w-4.5 h-4.5 text-orange-500"></i>
+                    <h2 class="text-lg font-bold text-slate-900">Reference Source Material (Optional Context)</h2>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1.5">Paste Textbook passages / Syllabus standards</label>
+                    <textarea id="sourceTextInput" oninput="state.sourceText = this.value" rows="4" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl p-3 text-sm text-slate-700 outline-hidden">${state.sourceText}</textarea>
+                    <span class="text-xs text-slate-400 mt-1 block">Character Count: ${state.sourceText.length} | Recommended minimum 100 characters for precise references.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right triggers sidebar column -->
+              <div class="space-y-6">
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+                  <div class="flex items-center space-x-2 pb-2">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-orange-500"></i>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase">Additional AI Guardrails</h3>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">Tone & Instruction Modifier</label>
+                    <textarea id="additionalInstructionsInput" oninput="state.additionalInstructions = this.value" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 outline-hidden">${state.additionalInstructions}</textarea>
+                  </div>
+                  <div class="p-3 bg-orange-50/50 rounded-xl border border-orange-100 text-xs text-orange-800 space-y-1">
+                    <div class="font-bold flex items-center gap-1">
+                      <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> <span>How VedaAI parses JSON:</span>
+                    </div>
+                    <p class="leading-relaxed">This tool builds custom systemic system prompts. It translates difficulty levels into structured cognitive tags that output formatted JSON ready for inline corrections.</p>
+                  </div>
+                </div>
+
+                <!-- Generate block trigger -->
+                <div class="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-6 text-white shadow-xl space-y-4">
+                  <h3 class="text-lg font-bold">Generate Question Paper</h3>
+                  <p class="text-xs text-orange-100 leading-relaxed">
+                    Your request is prepared to route through our distributed job queue engine. Redis acts as the temporary storage cache, and BullMQ processes the generation loop asynchronously before notifying our client over WebSockets.
+                  </p>
+                  <button onclick="runSimulationAndGenerate()" class="w-full bg-white hover:bg-slate-50 text-orange-600 font-extrabold py-3.5 px-4 rounded-xl transition duration-200 transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 text-sm shadow-md">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> <span>Execute Job Sequence</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // STEP 2: DISTRIBUTED REDIS QUEUE LOGGER
+        else if (state.activeStep === 2) {
+          let logLines = state.queueLogs.map(log => `
+            <div class="flex items-start space-x-2 leading-relaxed">
+              <span class="text-slate-500 flex-shrink-0">[${log.timestamp}]</span>
+              <span class="
+                ${log.type === 'client' ? 'text-cyan-400 font-semibold' : ''}
+                ${log.type === 'redis' ? 'text-rose-400' : ''}
+                ${log.type === 'worker' ? 'text-amber-400' : ''}
+                ${log.type === 'ai' ? 'text-purple-400' : ''}
+                ${log.type === 'warning' ? 'text-red-400 font-bold' : ''}
+                ${log.type === 'info' ? 'text-slate-400' : ''}
+              ">${log.message}</span>
+            </div>
+          `).join('');
+
+          tabContent = `
+            <div class="max-w-3xl mx-auto space-y-6">
+              <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-md">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div class="flex items-center space-x-3">
+                    <div class="p-2.5 bg-orange-50 rounded-xl text-orange-600">
+                      <i data-lucide="activity" class="w-6 h-6 animate-pulse"></i>
+                    </div>
+                    <div>
+                      <h3 class="text-lg font-bold text-slate-900">Distributed Job Processing Queue</h3>
+                      <p class="text-xs text-slate-400 font-semibold">Live stream of BullMQ jobs, WebSocket statuses, & Redis triggers.</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full ${state.processingState === 'completed' ? 'bg-green-500' : 'bg-amber-500 animate-ping'}"></span>
+                    <span class="text-xs font-bold capitalize text-slate-600">${state.processingState}</span>
+                  </div>
+                </div>
+
+                <div class="py-6 space-y-2">
+                  <div class="flex justify-between text-xs font-bold text-slate-500">
+                    <span>Job Processing Progress</span>
+                    <span>${state.queueProgress}%</span>
+                  </div>
+                  <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                    <div class="bg-gradient-to-r from-orange-500 to-amber-500 h-full rounded-full transition-all duration-300" style="width: ${state.queueProgress}%"></div>
+                  </div>
+                  <div class="flex justify-between items-center text-[10px] text-slate-400 font-semibold pt-1">
+                    <span class="flex items-center gap-1"><i data-lucide="database" class="w-3 h-3"></i> Redis Memory Usage: 14.5 MB</span>
+                    <span>Active Workers: 4 Online</span>
+                  </div>
+                </div>
+
+                <div class="bg-slate-900 rounded-xl p-4 console-font text-xs text-slate-300 space-y-2.5 border border-slate-800 shadow-inner max-h-[350px] overflow-y-auto">
+                  <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider border-b border-slate-800 pb-2 flex items-center justify-between">
+                    <span>System Log Console</span>
+                    <span class="text-orange-500 font-normal">veda_ai_wss_stream://</span>
+                  </div>
+                  ${logLines}
+                </div>
+
+                <div class="flex justify-between items-center pt-5 mt-4 border-t border-slate-100">
+                  <button onclick="changeStep(1)" class="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition">Configure Form Parameters</button>
+                  ${state.processingState === 'completed' ? `
+                    <button onclick="changeStep(3)" class="bg-slate-900 text-white hover:bg-slate-800 px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center space-x-1">
+                      <span>View Generated Paper</span>
+                      <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // STEP 3: HIGH-FIDELITY PREVIEW & PREMIUM PDF PRINT ENGINE
+        else if (state.activeStep === 3 && state.generatedPaper) {
+          
+          // Formulate section blocks
+          let examSectionsHtml = state.generatedPaper.sections.map((section, secIdx) => {
+            
+            let questionsHtml = section.questions.map((quest, qIdx) => {
+              
+              // Edit mode vs static mode
+              if (state.editingQuestionId === quest.id) {
+                return `
+                  <div class="bg-slate-50 p-4 rounded-xl border border-slate-300 space-y-3 print:hidden">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Edit Question Content</label>
+                    <textarea id="edit-text-${quest.id}" class="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800" rows="2">${quest.text}</textarea>
+                    <div class="flex gap-2">
+                      <div class="w-24">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase">Marks</label>
+                        <input type="number" id="edit-marks-${quest.id}" value="${quest.marks}" class="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-800">
+                      </div>
+                      <div class="flex items-end gap-1.5">
+                        <button onclick="saveEditedQuestion('${section.id}', '${quest.id}')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                          <i data-lucide="check" class="w-3 h-3"></i> Save
+                        </button>
+                        <button onclick="state.editingQuestionId = null; render();" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition">Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              } else {
+                let optionsHtml = '';
+                if (quest.options && quest.options.length > 0) {
+                  optionsHtml = `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 pt-1">
+                      ${quest.options.map((option, optIdx) => `
+                        <div class="text-xs text-slate-600 font-semibold flex items-center space-x-2">
+                          <span class="w-5 h-5 rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 flex items-center justify-center flex-shrink-0">
+                            ${String.fromCharCode(65 + optIdx)}
+                          </span>
+                          <span>${option}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  `;
+                }
+
+                let linesHtml = '';
+                if (quest.type === 'short' || quest.type === 'long') {
+                  linesHtml = `
+                    <div class="pl-6 pt-2 space-y-2">
+                      <div class="border-b border-dashed border-slate-300 h-6"></div>
+                      <div class="border-b border-dashed border-slate-300 h-6"></div>
+                      ${quest.type === 'long' ? `
+                        <div class="border-b border-dashed border-slate-300 h-6"></div>
+                        <div class="border-b border-dashed border-slate-300 h-6"></div>
+                        <div class="border-b border-dashed border-slate-300 h-6 print:hidden"></div>
+                      ` : ''}
+                    </div>
+                  `;
+                }
+
+                return `
+                  <div class="relative group bg-white hover:bg-slate-50/40 p-3 rounded-xl transition print:p-0 print:hover:bg-transparent question-item">
+                    <!-- Dynamic editing overlay panel -->
+                    <div class="absolute right-2 top-2 hidden group-hover:flex items-center space-x-1.5 bg-white shadow-md border border-slate-200 rounded-lg p-1 z-10 print:hidden">
+                      <button onclick="startEditingQuestion('${quest.id}', '${quest.text.replace(/'/g, "\\'")}', ${quest.marks})" class="p-1 hover:bg-slate-100 text-slate-600 rounded-md transition" title="Edit Question Content">
+                        <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                      </button>
+                      <button onclick="deleteQuestion('${section.id}', '${quest.id}')" class="p-1 hover:bg-red-50 text-red-500 rounded-md transition" title="Delete Question">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                      </button>
+                    </div>
+
+                    <div class="space-y-2">
+                      <div class="flex items-start justify-between gap-4">
+                        <div class="text-xs font-bold text-slate-800 leading-relaxed flex gap-2">
+                          <span class="font-extrabold text-slate-900">${qIdx + 1}.</span>
+                          <span>${quest.text}</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5 flex-shrink-0">
+                          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+                            quest.difficulty === 'Easy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                            quest.difficulty === 'Medium' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                            'bg-rose-50 text-rose-700 border border-rose-100'
+                          }">${quest.difficulty}</span>
+                          <span class="text-xs font-extrabold text-slate-900 flex-shrink-0 whitespace-nowrap">[${quest.marks} Marks]</span>
+                        </div>
+                      </div>
+                      ${optionsHtml}
+                      ${linesHtml}
+                    </div>
+                  </div>
+                `;
+              }
+            }).join('');
+
+            return `
+              <div class="space-y-4 section-block">
+                <!-- Section Header -->
+                <div class="border-b-2 border-slate-900 pb-1.5 flex justify-between items-end">
+                  <div>
+                    <h3 class="text-sm font-black text-slate-900 uppercase tracking-wider">${section.title}</h3>
+                    ${section.instruction ? `<p class="text-[11px] text-slate-500 italic mt-0.5">${section.instruction}</p>` : ''}
+                  </div>
+                  <span class="text-xs font-extrabold text-slate-950 uppercase tracking-wider">
+                    ${section.questions.reduce((sum, q) => sum + q.marks, 0)} Marks Total
+                  </span>
+                </div>
+                <!-- Section Questions Container -->
+                <div class="space-y-5">${questionsHtml}</div>
+              </div>
+            `;
+          }).join('');
+
+          tabContent = `
+            <div class="space-y-6">
+              <!-- Action bar containing direct download to PDF -->
+              <div id="exam-paper-container-controls" class="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-xs font-bold text-slate-500">Actions:</span>
+                  <button onclick="changeStep(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i> Edit Inputs / Re-generate
+                  </button>
+                  <button onclick="runSimulationAndGenerate()" class="bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Regenerate Paper with AI
+                  </button>
+                </div>
+                <div class="flex items-center gap-2 w-full md:w-auto">
+                  <button onclick="triggerPrintPdf()" class="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md">
+                    <i data-lucide="download" class="w-4 h-4"></i> Export / Download as PDF
+                  </button>
+                </div>
+              </div>
+
+              <!-- TARGET SECTION FOR PRINTING -->
+              <div id="exam-paper-section" class="w-full">
+                <!-- HIGH FIDELITY EXAM PAPER TEMPLATE -->
+                <div id="exam-paper-container" class="bg-white border-2 border-slate-300 rounded-2xl shadow-xl max-w-4xl mx-auto p-8 sm:p-12 space-y-8">
+                  
+                  <!-- Exam Header -->
+                  <div class="text-center space-y-2 border-b-4 border-double border-slate-900 pb-6 relative">
+                    <div class="text-sm font-extrabold tracking-widest text-slate-500 uppercase">${state.schoolName}</div>
+                    <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase">${state.generatedPaper.title || "Term Assessment"}</h1>
+                    
+                    <div class="flex flex-wrap justify-between items-center text-xs font-bold text-slate-600 pt-3 max-w-2xl mx-auto gap-2">
+                      <div class="bg-slate-100 px-3 py-1 rounded-md">Grade: ${state.generatedPaper.grade || state.gradeLevel}</div>
+                      <div class="bg-slate-100 px-3 py-1 rounded-md">Duration: ${state.generatedPaper.duration || "2 Hours"}</div>
+                      <div class="bg-orange-100 text-orange-800 px-3 py-1 rounded-md">Max Marks: ${state.generatedPaper.totalMarks} Marks</div>
+                    </div>
+
+                    <div class="absolute top-0 right-0 text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-sm uppercase font-bold tracking-wider print:hidden select-none">
+                      ${state.gradingStandard}
+                    </div>
+                  </div>
+
+                  <!-- Student Information Form (Editable) -->
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50/50 border border-slate-200 rounded-xl print:bg-transparent">
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Student Name</label>
+                      <input type="text" value="${state.studentName}" oninput="state.studentName = this.value" placeholder="Enter full name" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-hidden print:placeholder-transparent print:border-none print:p-0">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Roll Number</label>
+                      <input type="text" value="${state.studentRollNo}" oninput="state.studentRollNo = this.value" placeholder="e.g. 10B-08" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-hidden print:placeholder-transparent print:border-none print:p-0">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Class Section</label>
+                      <input type="text" value="${state.studentSection}" oninput="state.studentSection = this.value" placeholder="e.g. Section C" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-hidden print:placeholder-transparent print:border-none print:p-0">
+                    </div>
+                  </div>
+
+                  <!-- General Instructions -->
+                  <div class="space-y-1">
+                    <h4 class="text-xs font-black text-slate-900 uppercase tracking-wider">General Instructions:</h4>
+                    <p class="text-xs text-slate-500 font-semibold leading-relaxed">${state.generatedPaper.instructions || "Candidates must write answers in blue/black ink only. Answer booklets are supplied on request."}</p>
+                  </div>
+
+                  <!-- Compiled Sections -->
+                  <div class="space-y-8">${examSectionsHtml}</div>
+
+                  <!-- Footer margin -->
+                  <div class="text-center pt-8 border-t border-slate-200">
+                    <span class="text-xs font-extrabold tracking-widest text-slate-400 uppercase">*** END OF QUESTION PAPER ***</span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      // 3. COMPILE MASTER DASHBOARD TEMPLATE (SIDEBARS & MENUS)
+      root.innerHTML = `
+        ${notifyHtml}
+        
+        <!-- MOBILE HEADER BAR -->
+        <header class="md:hidden w-full bg-slate-950 text-white flex items-center justify-between p-4 shadow-md sticky top-0 z-50 print:hidden">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center font-bold text-white text-base">V</div>
+            <span class="font-semibold tracking-wide text-lg text-white">VedaAI</span>
+          </div>
+          <button onclick="toggleSidebar()" class="p-2 text-slate-300 hover:text-white hover:bg-zinc-800 rounded-lg transition" aria-label="Toggle Menu">
+            <i data-lucide="menu" class="w-6 h-6"></i>
+          </button>
+        </header>
+
+        <!-- LEFT SIDEBAR -->
+        <aside class="fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 shadow-xl md:shadow-none flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:static md:transform-none ${state.sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} print:hidden">
+          <div class="space-y-8">
+            <div class="flex items-center space-x-3 mt-2">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center font-extrabold text-white text-lg shadow-md shadow-orange-500/20">V</div>
+              <div>
+                <div class="flex items-center space-x-1.5">
+                  <span class="font-extrabold text-xl tracking-tight text-slate-900">VedaAI</span>
+                  <span class="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">PRO</span>
+                </div>
+                <p class="text-xs text-slate-400 font-medium">Hiring Assignment Sandbox</p>
+              </div>
+            </div>
+
+            <!-- Create Assignment button action -->
+            <button onclick="changeTab('assignments'); changeStep(1);" class="w-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 text-white font-semibold py-3 px-4 rounded-xl shadow-md hover:shadow-lg shadow-orange-500/25 transition duration-200 transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 text-sm">
+              <i data-lucide="plus" class="w-4.5 h-4.5 stroke-[3]"></i>
+              <span>Create Assignment</span>
+            </button>
+
+            <!-- Navigation Links -->
+            <nav class="space-y-1.5">
+              <button onclick="changeTab('home')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'home' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                <i data-lucide="home" class="w-4.5 h-4.5 ${state.activeTab === 'home' ? 'text-orange-500' : 'text-slate-400'}"></i>
+                <span>Home</span>
+              </button>
+
+              <button onclick="changeTab('groups')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'groups' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                <i data-lucide="users" class="w-4.5 h-4.5 ${state.activeTab === 'groups' ? 'text-orange-500' : 'text-slate-400'}"></i>
+                <span>My Groups</span>
+              </button>
+
+              <button onclick="changeTab('assignments')" class="w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'assignments' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                <div class="flex items-center space-x-3">
+                  <i data-lucide="file-text" class="w-4.5 h-4.5 ${state.activeTab === 'assignments' ? 'text-slate-900' : 'text-slate-400'}"></i>
+                  <span>Assignments</span>
+                </div>
+                <span class="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full font-bold">Active</span>
+              </button>
+
+              <button onclick="changeTab('toolkit')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'toolkit' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                <i data-lucide="briefcase" class="w-4.5 h-4.5 ${state.activeTab === 'toolkit' ? 'text-orange-500' : 'text-slate-400'}"></i>
+                <span>AI Teacher's Toolkit</span>
+              </button>
+
+              <button onclick="changeTab('library')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'library' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                <i data-lucide="book-open" class="w-4.5 h-4.5 ${state.activeTab === 'library' ? 'text-orange-500' : 'text-slate-400'}"></i>
+                <span>My Library</span>
+              </button>
+
+              <div class="pt-4 border-t border-slate-100 mt-4">
+                <button onclick="changeTab('settings')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${state.activeTab === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}">
+                  <i data-lucide="settings" class="w-4.5 h-4.5 ${state.activeTab === 'settings' ? 'text-orange-500' : 'text-slate-400'}"></i>
+                  <span>Settings</span>
+                </button>
+              </div>
+            </nav>
+          </div>
+
+          <!-- Bottom Profile Affiliations -->
+          <div class="mt-auto space-y-2">
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-full bg-orange-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-orange-200">
+                <span class="text-xl">${state.selectedProfileImage}</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <h4 class="text-xs font-bold text-slate-800 truncate">${state.schoolName}</h4>
+                <p class="text-[10px] text-slate-400 truncate font-semibold">${state.schoolCity}</p>
+              </div>
+            </div>
+
+            <button onclick="state.isLoggedIn = false; render(); triggerNotification('Workspace cleared safely.');" class="w-full flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold text-slate-400 hover:text-rose-500 transition">
+              <i data-lucide="log-out" class="w-3 h-3"></i>
+              <span>Sign Out Workspace</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- BACKGROUND SHADOW FOR MOBILE SIDEBAR -->
+        ${state.sidebarOpen ? `<div onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30 md:hidden"></div>` : ''}
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+          <!-- Top Control Header -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 mb-6 border-b border-slate-200 gap-4 print:hidden">
+            <div>
+              <div class="flex items-center space-x-2 text-xs text-slate-400 font-bold tracking-wider uppercase mb-1">
+                <span>Teacher Portal</span>
+                <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                <span class="text-slate-900 capitalize">${state.activeTab}</span>
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-3">
+                <span class="capitalize">${state.activeTab} Workspace</span>
+                ${state.activeTab === 'assignments' ? `
+                  <span class="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md tracking-widest flex items-center gap-1">
+                    <i data-lucide="sparkles" class="w-2.5 h-2.5 fill-white"></i> POWERED BY GEMINI 2.5
+                  </span>
+                ` : ''}
+              </h1>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="bg-white border border-slate-200 rounded-xl px-4 py-2 flex items-center gap-2 shadow-xs">
+                <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="text-xs font-bold text-slate-600">${state.teacherName}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic tab body content -->
+          <div class="w-full">${tabContent}</div>
+        </main>
+      `;
+
+      // Mount dynamic Lucide Icons
+      lucide.createIcons();
+    }
+
+    // Run first initialization mount
+    window.onload = function() {
+      render();
+    };
+  </script>
+</body>
+</html>
